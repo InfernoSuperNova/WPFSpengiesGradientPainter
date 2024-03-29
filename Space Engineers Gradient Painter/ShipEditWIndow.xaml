@@ -4,11 +4,14 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
       xmlns:local="clr-namespace:Space_Engineers_Gradient_Painter"
+      xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
+      
       mc:Ignorable="d" 
       d:DesignHeight="450" d:DesignWidth="800"
       Title="ShipEditWIndow">
 
     <Grid>
+        
         <ScrollViewer>
             <Grid Name="gridContainer" Margin="10" />
         </ScrollViewer>
@@ -20,7 +23,13 @@
                 <TextBlock Name="GridIdContainer" Text="0" Margin="0,0,0,0" FontSize="25" Background="#FFF5F5F5" />
                 <Button Content="Cycle Grid" Width="140" FontSize="25" Click="CycleGridBtn_Click" />
             </StackPanel>
-            <TextBlock Name="ColourBox" Text="Colour" FontSize="25" Background="#FFF5F5F5" Margin="0,0,0,0" Width="100" HorizontalAlignment="Right" />
+            <Button Name="ColourBox" Click="ColourBox_Click" Content="Start gradient..." FontSize="25" Margin="0,0,0,0" HorizontalAlignment="Right" />
+            <Button Name ="GradientColourABtn" Content="Gradient Colour A" FontSize="25" Click="GradientColourABtn_Click" Width="200" HorizontalAlignment="Right" Visibility="Collapsed"/>
+            <Button Name ="GradientColourBBtn" Content="Gradient Colour B" FontSize="25" Click="GradientColourBBtn_Click" Width="200" HorizontalAlignment="Right" Visibility="Collapsed"/>
+            <Button Name ="ReplaceWithRainbowBtn" Content="Replace with rainbow" FontSize="25" Click="ReplaceWithRainbowBtn_Click" Width="250" HorizontalAlignment="Right" Visibility="Collapsed"/>
+            <Button Name ="ReplaceBtn" Content="Replace" FontSize="25" Click="ReplaceBtn_Click" Width="100" HorizontalAlignment="Right" Visibility="Collapsed"/>
+
         </StackPanel>
+            
     </Grid>
 </Page>

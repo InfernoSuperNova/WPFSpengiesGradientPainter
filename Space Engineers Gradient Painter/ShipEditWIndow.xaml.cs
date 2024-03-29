@@ -13,6 +13,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using System.Xml;
 using VRageMath;
+using Xceed.Wpf.Toolkit;
 
 namespace Space_Engineers_Gradient_Painter
 {
@@ -80,7 +81,15 @@ namespace Space_Engineers_Gradient_Painter
 
         private Vector2I centerpoint;
 
-
+        System.Windows.Media.Color selectedColour;
+        enum UserGradientState
+        {
+            AwaitingStartAction = 0,
+            AwaitingUserSelectColour = 1,
+            AwaitingUserSelectLocation = 2,
+            AwaitingUserFinalConfirmation = 3,
+        }
+        UserGradientState currentState = UserGradientState.AwaitingStartAction;
         public ShipEditWindow(string editPath, MainWindow mainWindow)
         {
             InitializeComponent();
@@ -109,7 +118,7 @@ namespace Space_Engineers_Gradient_Painter
             bp = new XmlDocument();
             if (!IsXmlFileValid(tempPath + "\\bp.sbc"))
             {
-                MessageBox.Show("Invalid XML file (may be an issue on older blueprints. As a workaround, you can resave the blueprint.)");
+                System.Windows.MessageBox.Show("Invalid XML file (may be an issue on older blueprints. As a workaround, you can resave the blueprint.)");
                 ReturnBtn_Click(sender, e);
                 return;
             }
@@ -430,7 +439,7 @@ namespace Space_Engineers_Gradient_Painter
             }
             Directory.CreateDirectory(savePath);
             bp.Save(savePath + "\\bp.sbc");
-            MessageBox.Show("Blueprint saved to " + savePath);
+            System.Windows.MessageBox.Show("Blueprint saved to " + savePath);
         }
 
         public static Vector3 HSVToHSVOffset(Vector3 hsv)
@@ -504,13 +513,35 @@ namespace Space_Engineers_Gradient_Painter
         private void GenericBlockBtnHandler(int x, int y, Brush background)
         {
             Console.WriteLine($"Block clicked at ({x}, {y})");
-            ColourBox.Background = background;
             System.Windows.Media.Color color = ((SolidColorBrush)background).Color;
-            centerpoint = new Vector2I(x, y);
-            ReplaceColourWithRainbow(color);
+            
+            switch (currentState)
+            {
+                case UserGradientState.AwaitingStartAction:
+                    // do approximately absolutely nothing
+                    break;
+                case UserGradientState.AwaitingUserSelectColour:
+                    currentState = UserGradientState.AwaitingUserSelectLocation;
+                    ColourBox.Content = "Select a block on the ship to use as a reference location";
+                    originalSelectedColour = RGBToHSV(color);
+                    selectedColour = color;
+                    break;
+                case UserGradientState.AwaitingUserSelectLocation:
+                    centerpoint = new Vector2I(x, y);
+                    currentState = UserGradientState.AwaitingUserFinalConfirmation;
+                    ColourBox.Content = "Cancel";
+                    GradientColourABtn.Visibility = Visibility.Visible;
+                    GradientColourBBtn.Visibility = Visibility.Visible;
+                    ReplaceWithRainbowBtn.Visibility = Visibility.Visible;
+                    ReplaceBtn.Visibility = Visibility.Visible;
+                    break;
+                default:
+                    break;
+
+            }
         }
 
-        private void ReplaceColourWithRainbow(System.Windows.Media.Color background)
+        private void ReplaceColourWithRainbow(System.Windows.Media.Color ToReplace)
         {
             for (int i = 0; i < gridContainer.RowDefinitions.Count; i++)
             {
@@ -522,20 +553,20 @@ namespace Space_Engineers_Gradient_Painter
                     {
                         continue;
                     }
-                    System.Windows.Media.Color color = ((SolidColorBrush)button.Background).Color;
+                    System.Windows.Media.Color existingBlockColour = ((SolidColorBrush)button.Background).Color;
                     int distanceToCenterColumn = Math.Abs(i - centerpoint.Y);
-                    Vector3 hsvColour = new Vector3(z: 1f - (float)distanceToCenterColumn / (float)(gridContainer.RowDefinitions.Count / 2), x: (float)j / (float)gridContainer.ColumnDefinitions.Count, y: 1f);
-                    if (color == background)
+                    Vector3 replacementColour = new Vector3(z: 1f - (float)distanceToCenterColumn / (float)(gridContainer.RowDefinitions.Count / 2), x: (float)j / (float)gridContainer.ColumnDefinitions.Count, y: 1f);
+                    if (existingBlockColour == ToReplace)
                     {
-                        button.Background = new SolidColorBrush(HSVToRGB(hsvColour));
+                        button.Background = new SolidColorBrush(HSVToRGB(replacementColour));
                     }
-                    Vector3 encodedColour = HSVToHSVOffset(hsvColour);
+                    Vector3 encodedColour = HSVToHSVOffset(replacementColour);
                     foreach (Block block in blocks[i][j])
                     {
                         if (block.doesExist)
                         {
                             XmlNode colourNode = block.block.SelectSingleNode("ColorMaskHSV");
-                            if (colourNode != null && block.rawColour == background)
+                            if (colourNode != null && block.rawColour == ToReplace)
                             {
                                 colourNode.Attributes["x"].Value = encodedColour.X.ToString();
                                 colourNode.Attributes["y"].Value = encodedColour.Y.ToString();
@@ -547,6 +578,127 @@ namespace Space_Engineers_Gradient_Painter
             }
             Console.WriteLine("paint created");
             bp.Save(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\temp\\bp.sbc");
+        }
+
+        private void ReplaceColourWithGradient(System.Windows.Media.Color ToReplace, Vector3 gradientA, Vector3 gradientB)
+        {
+            for (int i = 0; i < gridContainer.RowDefinitions.Count; i++)
+            {
+                int j;
+                for (j = 0; j < gridContainer.ColumnDefinitions.Count; j++)
+                {
+                    Button button = gridContainer.Children.OfType<Button>().FirstOrDefault((Button e) => Grid.GetRow(e) == i && Grid.GetColumn(e) == j);
+                    if (button == null)
+                    {
+                        continue;
+                    }
+                    System.Windows.Media.Color existingBlockColour = ((SolidColorBrush)button.Background).Color;
+                    int distanceToCenterColumn = Math.Abs(i - centerpoint.Y);
+                    Vector3 replacementColour = Vector3.Lerp(gradientA, gradientB, (float)j / (float)gridContainer.ColumnDefinitions.Count);
+                    if (existingBlockColour == ToReplace)
+                    {
+                        button.Background = new SolidColorBrush(HSVToRGB(replacementColour));
+                    }
+                    Vector3 encodedColour = HSVToHSVOffset(replacementColour);
+                    foreach (Block block in blocks[i][j])
+                    {
+                        if (block.doesExist)
+                        {
+                            XmlNode colourNode = block.block.SelectSingleNode("ColorMaskHSV");
+                            if (colourNode != null && block.rawColour == ToReplace)
+                            {
+                                colourNode.Attributes["x"].Value = encodedColour.X.ToString();
+                                colourNode.Attributes["y"].Value = encodedColour.Y.ToString();
+                                colourNode.Attributes["z"].Value = encodedColour.Z.ToString();
+                            }
+                        }
+                    }
+                }
+            }
+            Console.WriteLine("paint created");
+            bp.Save(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\temp\\bp.sbc");
+        }
+
+
+        private void GradientColourABtn_Click(object sender, RoutedEventArgs e)
+        {
+            GradientButtonHandler(GradientColourABtn);
+        }
+        private void GradientColourBBtn_Click(object sender, RoutedEventArgs e)
+        {
+            GradientButtonHandler(GradientColourBBtn);
+        }
+
+        private void GradientButtonHandler(Button button)
+        {
+            Window window = new Window();
+            StackPanel windowContent = new StackPanel();
+            ColorCanvas colourCanvas = new ColorCanvas();
+            Button doneBtn = new Button();
+            window.Content = windowContent;
+            window.Title = "Select a colour";
+            window.Width = 600;
+            window.Height = 400;
+            // initialize the colour canvas
+            colourCanvas.SelectedColor = ((SolidColorBrush)button.Background).Color;
+
+            windowContent.Children.Add(colourCanvas);
+            windowContent.Children.Add(doneBtn);
+
+            doneBtn.Content = "Done";
+            doneBtn.Click += delegate
+            {
+                // set the colour to the selected colour
+                button.Background = new SolidColorBrush((System.Windows.Media.Color)colourCanvas.SelectedColor);
+                window.Close();
+
+            };
+            window.ShowDialog();
+        }
+        private void ReplaceBtn_Click(object sender, RoutedEventArgs e)
+        {
+            // extract the colours of the gradient buttons
+            Vector3 colourA = RGBToHSV(((SolidColorBrush)GradientColourABtn.Background).Color);
+            Vector3 colourB = RGBToHSV(((SolidColorBrush)GradientColourBBtn.Background).Color);
+            ReplaceColourWithGradient(selectedColour, colourA, colourB);
+            currentState = UserGradientState.AwaitingStartAction;
+            ColourBox.Content = "Start gradient...";
+            GradientColourABtn.Visibility = Visibility.Hidden;
+            GradientColourBBtn.Visibility = Visibility.Hidden;
+            ReplaceWithRainbowBtn.Visibility = Visibility.Hidden;
+            ReplaceBtn.Visibility = Visibility.Hidden;
+        }
+
+
+        private void ColourBox_Click(object sender, RoutedEventArgs e)
+        {
+            switch (currentState)
+            {
+                case UserGradientState.AwaitingStartAction:
+                    currentState = UserGradientState.AwaitingUserSelectColour;
+                    ColourBox.Content = "Select a block on the ship to use as a reference colour";
+                    break;
+                case UserGradientState.AwaitingUserSelectColour:
+                    // cancel code here
+                    break;
+                    case UserGradientState.AwaitingUserSelectLocation:
+                    // cancel code here
+                break;
+                    case UserGradientState.AwaitingUserFinalConfirmation:
+                    // cancel code here
+                break;
+            }
+        }
+
+        private void ReplaceWithRainbowBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ReplaceColourWithRainbow(selectedColour);
+            currentState = UserGradientState.AwaitingStartAction;
+            ColourBox.Content = "Start gradient...";
+            GradientColourABtn.Visibility = Visibility.Hidden;
+            GradientColourBBtn.Visibility = Visibility.Hidden;
+            ReplaceWithRainbowBtn.Visibility = Visibility.Hidden;
+            ReplaceBtn.Visibility = Visibility.Hidden;
         }
     }
 }
